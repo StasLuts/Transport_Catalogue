@@ -6,7 +6,9 @@
 
 namespace json_reader
 {
-	void JsonRead(std::istream& input)
+	//------------------input-------------------------
+
+	void JsonSerialize(std::istream& input)
 	{
 		transport_catalogue::TransportCatalogue trans_cat;
 		const json::Dict dict = json::Load(input).GetRoot().AsDict();
@@ -27,14 +29,13 @@ namespace json_reader
 		{
 			SetRoutingSettings(trans_roter, routing_settings->second.AsDict());
 		}
-		const auto stat_requests = dict.find("stat_requests");
-		if (stat_requests != dict.end())
+		serialize::Serializer serializer(trans_cat, map_renderer, trans_roter);
+		const auto serialization_settings = dict.find("serialization_settings");
+		if (serialization_settings != dict.end())
 		{
-			MakeResponse(request_handler::RequestHandler(trans_cat, map_renderer), trans_roter, stat_requests->second.AsArray());
+			serializer.Serialize(serialization_settings->second.AsDict().at("file").AsString());
 		}
 	}
-
-	//------------------input-------------------------
 
 	void MakeBase(transport_catalogue::TransportCatalogue& trans_cat, const json::Array& arr)
 	{
@@ -77,7 +78,7 @@ namespace json_reader
 
 	void ReadStopData(transport_catalogue::TransportCatalogue& trans_cat, const json::Dict& dict)
 	{
-		const auto name = dict.at("name").AsString();
+		const std::string name = dict.at("name").AsString();
 		const auto latitude = dict.at("latitude").AsDouble();
 		const auto longitude = dict.at("longitude").AsDouble();
 		trans_cat.AddStopDatabase(name, latitude, longitude);
@@ -85,8 +86,8 @@ namespace json_reader
 
 	void ReadStopDistance(transport_catalogue::TransportCatalogue& trans_cat, const json::Dict& dict)
 	{
-		const auto from_stop_name = dict.at("name").AsString();
-		const auto stops = dict.at("road_distances").AsDict();
+		const std::string from_stop_name = dict.at("name").AsString();
+		const json::Dict stops = dict.at("road_distances").AsDict();
 		for (const auto& [to_stop_name, distance] : stops)
 		{
 			trans_cat.SetDistanceBetweenStops(from_stop_name, to_stop_name, distance.AsInt());
@@ -95,7 +96,7 @@ namespace json_reader
 
 	void ReadBusData(transport_catalogue::TransportCatalogue& trans_cat, const json::Dict& dict)
 	{
-		const auto bus_name = dict.at("name").AsString();
+		const std::string bus_name = dict.at("name").AsString();
 		std::vector<std::string_view> stops;
 		for (const auto& stop : dict.at("stops").AsArray())
 		{
@@ -163,42 +164,26 @@ namespace json_reader
 			settings.color_palette.emplace_back(GetColor(color));
 		}
 		map_renderer.SetRenderSettings(settings);
-
-		const auto all_stops_coordinates = trans_cat.GetAllStopsCoordinates();
-		renderer::SphereProjector projector(all_stops_coordinates.begin(), all_stops_coordinates.end(), settings.width, settings.height, settings.padding);
-		const std::vector<svg::Color> color_pallete = map_renderer.GetColorPallete();
-		size_t color_num = 0;
-		std::map<std::string, svg::Point> stops;
-		for (const auto& it : trans_cat.GetBuses())
-		{
-			std::vector<svg::Point> stops_points;
-			for (const auto& stop : trans_cat.GetStops(it->bus_num))
-			{
-				stops_points.emplace_back(projector(stop->coodinates));
-				stops[stop->stop_name] = stops_points.back();
-			}
-			if (it->is_circular == true)
-			{
-				map_renderer.AddTextRender(*stops_points.begin(), it->bus_num, color_pallete[color_num], false);
-				map_renderer.AddRoutRender(stops_points, color_pallete[color_num]);
-			}
-			else if (it->is_circular == false)
-			{
-				map_renderer.AddTextRender(*stops_points.begin(), it->bus_num, color_pallete[color_num], false);
-				if (*it->stops.begin() != it->stops.back())map_renderer.AddTextRender(stops_points.back(), it->bus_num, color_pallete[color_num], false);
-				stops_points.insert(stops_points.end(), stops_points.rbegin() + 1, stops_points.rend());
-				map_renderer.AddRoutRender(stops_points, color_pallete[color_num]);
-			}
-			(color_num == color_pallete.size() - 1) ? color_num = 0 : ++color_num;
-		}
-		for (const auto& [name, coordinate] : stops)
-		{
-			map_renderer.AddStopPointRender(coordinate);
-			map_renderer.AddTextRender(coordinate, name, color_pallete[color_num], true);
-		}
 	}
 
 	//------------------outnput-------------------------
+
+	void JsonDeserialize(std::istream& input, std::ostream& output)
+	{
+		transport_catalogue::TransportCatalogue trans_cat;
+		renderer::MapRenderer map_renderer;
+		const auto dict = json::Load(input).GetRoot().AsDict();
+		const auto serialization_settings = dict.find("serialization_settings");
+		serialize::Deserializer deserializer;
+		deserializer.DeserializeCatalogAndRenderer(trans_cat, map_renderer, serialization_settings->second.AsDict().at("file").AsString());
+		transport_router::TransportRouter router(trans_cat);
+		deserializer.DeserealizeRouter(router, serialization_settings->second.AsDict().at("file").AsString());
+		const auto stat_requests = dict.find("stat_requests");
+		if (stat_requests != dict.end())
+		{
+			MakeResponse(request_handler::RequestHandler(trans_cat, map_renderer), router, stat_requests->second.AsArray());
+		}
+	}
 
 	void MakeResponse(const request_handler::RequestHandler& request_handler, transport_router::TransportRouter& trans_roter, const json::Array& arr)
 	{
@@ -314,4 +299,5 @@ namespace json_reader
 			.Key("items").Value(items)
 			.EndDict().Build().AsDict();
 	}
+
 } // namespace json_reader

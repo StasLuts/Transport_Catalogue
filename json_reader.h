@@ -5,10 +5,14 @@
 #include "map_renderer.h"
 #include "transport_catalogue.h"
 #include "request_handler.h"
+#include "serialization.h"
 
 namespace json_reader
 {
-	void JsonRead(std::istream& input);
+
+	void JsonSerialize(std::istream& input);
+
+	void JsonDeserialize(std::istream& input, std::ostream& output);
 
 	//------------------input-------------------------
 

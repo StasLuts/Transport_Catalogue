@@ -1,16 +1,17 @@
-#include "map_renderer.h"
 #include "json_reader.h"
-#include "request_handler.h"
+#include "json_builder.h"
 
 #include <iostream>
-#include <fstream>
 
 using namespace std::literals;
 
+void PrintUsage(std::ostream& stream = std::cerr) {
+    stream << "Usage: transport_catalogue [make_base|process_requests]\n"sv;
+}
+
 int main()
 {
-    //std::ifstream in;
-    //in.open("C:\\Users\\User\\Downloads\\s10_final_opentest\\s10_final_opentest_1.json");
-    json_reader::JsonRead(std::cin);
+    json_reader::JsonSerialize(std::cin);
+    json_reader::JsonDeserialize(std::cin, std::cout);
     return 0;
 }
